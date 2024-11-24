@@ -2,65 +2,73 @@ import networkx as nx
 import json
 
 def calculate_clusters_with_fusion_no_propagation(G, score_threshold, distance_max):
+    """
+    Calculate clusters from a graph based on a score threshold and a maximum distance.
+    Nodes with scores below the threshold are ignored, and clusters are merged if they overlap.
 
-
-    clusters = []  # Liste des clusters
-    visited = set()  # Ensemble des nœuds déjà inclus dans un cluster
+    """
+    clusters = []  # List to store clusters
+    visited = set()  # Set to track nodes that have already been assigned to a cluster
 
     for node, data in G.nodes(data=True):
-        # Ignorer les nœuds en dessous du seuil ou déjà assignés
+        # Skip nodes that do not meet the score threshold or are already visited
         if data['score'] < score_threshold:
             continue
 
-        # Initialiser un nouveau cluster avec le nœud central
+        # Initialize a new cluster with the current node as the center
         cluster = {node}
 
-        # Ajouter les voisins respectant la distance
+        # Add neighbors within the specified maximum distance
         for neighbor, edge_data in G[node].items():
-            if (
-                edge_data.get("weight", float("inf")) <= distance_max
-            ):
+            if edge_data.get("weight", float("inf")) <= distance_max:
                 cluster.add(neighbor)
 
-        # Fusionner avec les clusters existants qui partagent des cellules
+        # Merge the new cluster with existing clusters if they overlap
         merged = False
         for existing_cluster in clusters:
-            if cluster & existing_cluster:  # Intersection non vide
+            if cluster & existing_cluster:  # Check for non-empty intersection
                 existing_cluster.update(cluster)
                 merged = True
                 break
 
-        # Ajouter comme un nouveau cluster s'il n'y a pas eu de fusion
+        # If no merging occurred, add the new cluster to the list
         if not merged:
             clusters.append(cluster)
 
-        # Marquer tous les nœuds du cluster comme visités
+        # Mark all nodes in the cluster as visited
         visited.update(cluster)
 
     return clusters
 
 def save_clusters_to_file(clusters, output_file):
+    """
+    Save clusters to a JSON file.
 
-    # Convertir les clusters en liste de listes pour JSON
+    Parameters:
+        clusters (List[set]): The clusters to save.
+        output_file (str): Path to the output JSON file.
+    """
+    # Convert clusters to a list of lists for JSON serialization
     clusters_list = [list(cluster) for cluster in clusters]
 
-    # Sauvegarder dans un fichier JSON
+    # Save to the specified file
     with open(output_file, "w") as f:
         json.dump(clusters_list, f, indent=4)
-    print(f"Clusters sauvegardés dans {output_file}")
+    print(f"Clusters saved to {output_file}")
 
-# Charger le graphe depuis le fichier JSON
+# Load the graph from a JSON file
 graph_path = "OptimizePath/drone_graph.json"
 with open(graph_path, "r") as f:
     graph_data = json.load(f)
 
+# Convert the JSON data back to a NetworkX graph
 G = nx.node_link_graph(graph_data)
 
-# Calculer les clusters avec un seuil de score et une distance maximale
-score_threshold = 0.2  # Seuil de score pour être un centre de cluster
-distance_max = 3000  # Distance maximale entre le centre et ses voisins
+# Compute clusters with a score threshold and maximum distance
+score_threshold = 0.2  # Minimum score to be a cluster center
+distance_max = 3000  # Maximum distance between the center and its neighbors
 clusters = calculate_clusters_with_fusion_no_propagation(G, score_threshold, distance_max)
 
-# Sauvegarder les clusters
+# Save the clusters to a JSON file
 output_file = "OptimizePath/clusters.json"
 save_clusters_to_file(clusters, output_file)
