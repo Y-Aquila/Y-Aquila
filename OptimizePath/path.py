@@ -9,42 +9,58 @@ def sort_clusters_by_importance(G, clusters):
 
     cluster_scores = []
     for cluster in clusters:
+        # Calculate total importance of a cluster
         importance = sum(G.nodes[node]['score'] for node in cluster)
         cluster_scores.append((cluster, importance))
     
-    # Trier par importance décroissante
+    # Sort clusters by importance in descending order
     sorted_clusters = sorted(cluster_scores, key=lambda x: x[1], reverse=True)
     return [cluster for cluster, _ in sorted_clusters]
 
 def find_tour_in_cluster_with_priority(G, cluster):
+    """
+    Find a tour within a cluster, prioritizing nodes by their scores and minimizing distances.
 
+    Parameters:
+        G (networkx.Graph): The graph containing the nodes and edges.
+        cluster (set): A cluster of node IDs.
 
+    Returns:
+        List[int]: An ordered list of node IDs representing the tour.
+    """
     from networkx.algorithms.approximation import traveling_salesman_problem as tsp
 
-    # Trier les nœuds par score décroissant
+    # Sort nodes in the cluster by score in descending order
     cluster_nodes = [(node, G.nodes[node]['score']) for node in cluster]
     cluster_nodes.sort(key=lambda x: x[1], reverse=True)
 
-    # Chemin basé sur les scores
+    # Start the tour with nodes that have a score > 0
     tour = [node for node, score in cluster_nodes if score > 0]
 
-    # Ajouter les nœuds restants en minimisant la distance
+    # Add remaining nodes to the tour by minimizing distance
     remaining_nodes = {node for node, score in cluster_nodes if score == 0}
     if remaining_nodes:
         subgraph = G.subgraph(remaining_nodes)
         distance_tour = tsp(subgraph, weight="weight")
         tour.extend(distance_tour)
 
-    # Retourner au point de départ
+    # Return to the starting point if the tour is not closed
     if tour and tour[0] != tour[-1]:
         tour.append(tour[0])
 
     return tour
 
 def plot_clusters_with_paths(G, clusters, tours, output_file="cluster_visualization.png"):
+    """
+    Plot clusters with their dynamic paths on a geographic map.
 
-
-    # Charger les couches géographiques
+    Parameters:
+        G (networkx.Graph): The graph containing nodes with positions.
+        clusters (List[set]): List of clusters to plot.
+        tours (dict): Dictionary of tours for each cluster.
+        output_file (str): Path to save the visualization image.
+    """
+    # Load geographic layers for AOI, flood zones, and buildings
     aoi_dir = "DATA/filtered_data_aoi_only"
     aoi_files = [os.path.join(aoi_dir, file) for file in os.listdir(aoi_dir) if file.endswith('.geojson')]
     aoi_gdfs = [gpd.read_file(file) for file in aoi_files]
@@ -55,28 +71,28 @@ def plot_clusters_with_paths(G, clusters, tours, output_file="cluster_visualizat
     flood_gdf = gpd.read_file(flood_path)
     building_gdf = gpd.read_file(building_path)
 
-    # Créer la carte
+    # Create the map
     fig, ax = plt.subplots(figsize=(15, 15))
 
-    # Fond statique
+    # Plot static background layers
     aoi_gdf.plot(ax=ax, color='black', alpha=0.2, label='AOIs')
     flood_gdf.plot(ax=ax, color='blue', alpha=0.5, label='Flood Zones')
     building_gdf.plot(ax=ax, color='green', alpha=0.5, label='Buildings')
 
-    # Tracer les clusters avec leurs parcours
+    # Plot each cluster with its path
     colors = plt.cm.get_cmap("tab20", len(clusters))
     for i, cluster in enumerate(clusters):
         tour = tours[f"Cluster_{i + 1}"]
         cluster_coords = [G.nodes[node]['position'] for node in cluster]
 
-        # Afficher les nœuds du cluster
+        # Plot cluster nodes
         ax.scatter(
             [coord[1] for coord in cluster_coords],
             [coord[0] for coord in cluster_coords],
             label=f"Cluster {i + 1}", s=50, color=colors(i)
         )
 
-        # Tracer le parcours
+        # Plot the tour path
         tour_coords = [G.nodes[node]['position'] for node in tour]
         ax.plot(
             [coord[1] for coord in tour_coords],
@@ -84,7 +100,7 @@ def plot_clusters_with_paths(G, clusters, tours, output_file="cluster_visualizat
             linestyle='-', color=colors(i), linewidth=2
         )
 
-        # Ajouter des annotations avec l'ordre de parcours
+        # Add annotations with tour order
         for order, node in enumerate(tour, start=1):
             coord = G.nodes[node]['position']
             ax.text(
@@ -93,16 +109,16 @@ def plot_clusters_with_paths(G, clusters, tours, output_file="cluster_visualizat
                 bbox=dict(facecolor='white', alpha=0.7, edgecolor='none')
             )
 
-    # Ajouter légende et titre
-    plt.title("Clusters et Parcours Dynamiques", fontsize=18)
+    # Add legend and title
+    plt.title("Clusters and Dynamic Paths", fontsize=18)
     plt.xlabel("Longitude")
     plt.ylabel("Latitude")
     plt.legend()
     plt.savefig(output_file, dpi=300)
-    print(f"Visualisation sauvegardée dans {output_file}")
+    print(f"Visualization saved to {output_file}")
     plt.show()
 
-# Charger le graphe et les clusters
+# Load the graph and clusters
 graph_path = "OptimizePath/drone_graph.json"
 clusters_file = "OptimizePath/clusters.json"
 
@@ -113,13 +129,13 @@ with open(clusters_file, "r") as f:
 
 G = nx.node_link_graph(graph_data)
 
-# Trier les clusters et calculer les parcours
+# Sort clusters by importance and calculate tours
 sorted_clusters = sort_clusters_by_importance(G, [set(cluster) for cluster in clusters])
 cluster_tours = {}
 for i, cluster in enumerate(sorted_clusters):
-    print(f"Calcul du parcours pour le cluster {i + 1}...")
+    print(f"Calculating tour for Cluster {i + 1}...")
     tour = find_tour_in_cluster_with_priority(G, cluster)
     cluster_tours[f"Cluster_{i + 1}"] = tour
 
-# Afficher les clusters et les parcours
+# Plot clusters and their tours
 plot_clusters_with_paths(G, sorted_clusters, cluster_tours)
